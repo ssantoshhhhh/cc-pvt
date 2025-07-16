@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useChat } from '../contexts/ChatContext';
+import { useBuyRequests } from '../contexts/BuyRequestContext';
 import { 
   FaSearch, 
   FaUser, 
@@ -13,6 +15,9 @@ import { FiMessageCircle } from 'react-icons/fi';
 
 const Layout = ({ children }) => {
   const { user, isAuthenticated, logout, getProfilePictureUrl } = useAuth();
+  const { totalUnread } = useChat();
+  const { pendingCount } = useBuyRequests();
+  const notificationCount = (totalUnread || 0) + (pendingCount || 0);
   const location = useLocation();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -117,7 +122,7 @@ const Layout = ({ children }) => {
                 <div className="relative">
                   <button
                     onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                    className="flex items-center space-x-2 p-2 rounded-md text-gray-700 hover:text-green-600 hover:bg-green-50 transition-colors duration-200"
+                    className="flex items-center space-x-2 p-2 rounded-md text-gray-700 hover:text-green-600 hover:bg-green-50 transition-colors duration-200 relative"
                   >
                     {profilePictureUrl ? (
                       <img
@@ -129,6 +134,12 @@ const Layout = ({ children }) => {
                       <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
                         <FaUser size={14} className="text-gray-600" />
                       </div>
+                    )}
+                    {/* Notification bubble on avatar */}
+                    {notificationCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full border border-white">
+                        {notificationCount}
+                      </span>
                     )}
                     <span className="hidden sm:block text-sm font-medium">
                       {user?.name?.split(' ')[0]}
@@ -164,19 +175,31 @@ const Layout = ({ children }) => {
                       </Link>
                       <Link
                         to="/chats"
-                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-green-50 hover:text-green-600"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-green-50 hover:text-green-600 relative"
                         onClick={() => setIsProfileMenuOpen(false)}
                       >
                         <FiMessageCircle className="inline mr-2" />
                         My Chats
+                        {/* Notification bubble on My Chats menu */}
+                        {notificationCount > 0 && (
+                          <span className="absolute top-2 right-3 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full border border-white">
+                            {notificationCount}
+                          </span>
+                        )}
                       </Link>
                       <Link
                         to="/buy-requests"
-                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-green-50 hover:text-green-600"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-green-50 hover:text-green-600 relative"
                         onClick={() => setIsProfileMenuOpen(false)}
                       >
                         <FaCog className="inline mr-2" />
                         Buy Requests
+                        {/* Notification bubble on Buy Requests menu */}
+                        {pendingCount > 0 && (
+                          <span className="absolute top-2 right-3 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full border border-white">
+                            {pendingCount}
+                          </span>
+                        )}
                       </Link>
                       {user?.role === 'admin' && (
                         <Link

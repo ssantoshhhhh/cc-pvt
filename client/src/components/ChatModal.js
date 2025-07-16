@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useAuth } from '../contexts/AuthContext';
-import { FiSend, FiX, FiUser, FiMessageCircle } from 'react-icons/fi';
+import { FiSend, FiX, FiUser, FiMessageCircle, FiCheck, FiCheckDouble } from 'react-icons/fi';
+import { MdDone, MdDoneAll } from 'react-icons/md';
 import toast from 'react-hot-toast';
 import axios from '../axios';
 
@@ -211,6 +212,32 @@ const ChatModal = ({ isOpen, onClose, product, sellerId, chatId: propChatId }) =
 
   const otherPerson = getOtherPerson();
 
+  // Helper to group messages by date
+  const groupMessagesByDate = (messages) => {
+    const groups = [];
+    let lastDate = null;
+    messages.forEach((msg) => {
+      const msgDate = new Date(msg.timestamp);
+      const dateKey = msgDate.toDateString();
+      if (!lastDate || lastDate !== dateKey) {
+        groups.push({ type: 'date', date: msgDate });
+        lastDate = dateKey;
+      }
+      groups.push({ type: 'msg', msg });
+    });
+    return groups;
+  };
+
+  // Helper to format date separator
+  const formatDateSeparator = (date) => {
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return date.toLocaleDateString();
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -273,8 +300,27 @@ const ChatModal = ({ isOpen, onClose, product, sellerId, chatId: propChatId }) =
               </div>
             </div>
           ) : chat?.messages?.length > 0 ? (
-            chat.messages.map((msg, index) => {
+            groupMessagesByDate(chat.messages).map((item, index) => {
+              if (item.type === 'date') {
+                return (
+                  <div key={`date-${index}`} className="flex justify-center my-2">
+                    <span className="bg-gray-200 text-gray-700 text-xs px-3 py-1 rounded-full shadow-sm">
+                      {formatDateSeparator(item.date)}
+                    </span>
+                  </div>
+                );
+              }
+              const msg = item.msg;
               const isOwnMessage = msg.sender._id === user?.id;
+              // Message status ticks
+              let tickIcon = null;
+              if (isOwnMessage) {
+                if (msg.isRead) {
+                  tickIcon = <MdDoneAll className="inline ml-1 text-blue-500" title="Read" />;
+                } else {
+                  tickIcon = <MdDoneAll className="inline ml-1 text-gray-400" title="Delivered" />;
+                }
+              }
               return (
                 <div
                   key={index}
@@ -306,11 +352,10 @@ const ChatModal = ({ isOpen, onClose, product, sellerId, chatId: propChatId }) =
                     }`}
                   >
                     <p className="text-sm">{msg.content}</p>
-                    <p className={`text-xs mt-1 ${
-                      isOwnMessage ? 'text-green-100' : 'text-gray-500'
-                    }`}>
-                      {formatTime(msg.timestamp)}
-                    </p>
+                    <div className="flex items-center justify-end space-x-1 mt-1">
+                      <span className={`text-xs ${isOwnMessage ? 'text-green-100' : 'text-gray-500'}`}>{formatTime(msg.timestamp)}</span>
+                      {isOwnMessage && tickIcon}
+                    </div>
                   </div>
                   {isOwnMessage && (
                     <div className="flex-shrink-0">
