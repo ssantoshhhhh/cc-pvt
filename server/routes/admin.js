@@ -28,9 +28,14 @@ router.get('/dashboard', async (req, res) => {
       isSeller: true
     });
     
-    // Get total transactions (placeholder for future implementation)
-    const totalTransactions = 0;
-    const totalRevenue = 0;
+    // Get total transactions (number of sold products)
+    const totalTransactions = await Product.countDocuments({ isSold: true });
+    // Get total revenue (sum of prices of sold products)
+    const totalRevenueAgg = await Product.aggregate([
+      { $match: { isSold: true } },
+      { $group: { _id: null, total: { $sum: '$price' } } }
+    ]);
+    const totalRevenue = totalRevenueAgg[0]?.total || 0;
     const activeListings = await Product.countDocuments({ 
       isActive: true,
       availableQuantity: { $gt: 0 }
