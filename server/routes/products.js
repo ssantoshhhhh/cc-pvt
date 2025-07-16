@@ -3,8 +3,50 @@ const { body, validationResult } = require('express-validator');
 const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const { protect } = require('../middleware/auth');
+const multer = require('multer');
+const path = require('path');
 
 const router = express.Router();
+
+// Multer storage for product images
+const productImageStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, '../../uploads/products'));
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname.replace(/\s+/g, '_'));
+  }
+});
+const uploadProductImages = multer({
+  storage: productImageStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files (jpeg, jpg, png, gif) are allowed!'), false);
+    }
+  }
+});
+
+// Image upload endpoint
+router.post('/upload-image', protect, uploadProductImages.array('images'), (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ message: 'No files uploaded' });
+    }
+    // Return URLs relative to /uploads/products/
+    const urls = req.files.map(file => `/uploads/products/${file.filename}`);
+    res.json({ success: true, urls });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Image upload failed' });
+  }
+});
 
 // @route   GET /api/products
 // @desc    Get all products

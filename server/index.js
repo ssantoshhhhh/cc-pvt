@@ -46,6 +46,9 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Serve uploads directory as static
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // Database connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/campus_connect')
   .then(() => console.log('MongoDB connected successfully'))

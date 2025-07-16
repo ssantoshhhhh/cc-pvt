@@ -158,7 +158,9 @@ const BuyRequests = () => {
         {filteredRequests.length > 0 ? (
           <div className="space-y-4">
             {filteredRequests.map((request) => {
-              const isSeller = request.seller._id === user?.id;
+              // Add null checks for seller and buyer
+              if (!request || !request.seller || !request.buyer) return null;
+              const isSeller = request.seller && request.seller._id === user?.id;
               const otherUser = isSeller ? request.buyer : request.seller;
               
               return (

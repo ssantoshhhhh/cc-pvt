@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../axios';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 const AddProduct = () => {
   const navigate = useNavigate();
@@ -24,6 +25,11 @@ const AddProduct = () => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const [uploadedImageUrls, setUploadedImageUrls] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState([]);
+  const fileInputRef = React.useRef();
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -44,22 +50,67 @@ const AddProduct = () => {
     }
   };
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
-    // For now, let's just use placeholder URLs since we don't have file upload set up
-    const imageUrls = files.map(file => `placeholder-${file.name}`);
-    setFormData(prev => ({
-      ...prev,
-      images: [...prev.images, ...imageUrls]
-    }));
+    setImageFiles(prev => [...prev, ...files]);
+    // Show local previews
+    const previews = files.map(file => URL.createObjectURL(file));
+    setImagePreviews(prev => [...prev, ...previews]);
+
+    // Upload to backend with progress
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const formData = new FormData();
+      formData.append('images', file);
+      setUploadProgress(prev => [...prev, 0]);
+      try {
+        const res = await axios.post('/api/products/upload-image', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (progressEvent) => {
+            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(prev => {
+              const updated = [...prev];
+              updated[uploadProgress.length + i - files.length + 1] = percent;
+              return updated;
+            });
+          }
+        });
+        if (res.data && res.data.urls) {
+          setUploadedImageUrls(prev => [...prev, ...res.data.urls]);
+        }
+      } catch (err) {
+        alert('Image upload failed. Please try again.');
+        setUploadProgress(prev => prev.filter((_, idx) => idx !== (uploadProgress.length + i - files.length + 1)));
+      }
+    }
   };
 
   const removeImage = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      images: prev.images.filter((_, i) => i !== index)
-    }));
+    setImageFiles(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+    setUploadedImageUrls(prev => prev.filter((_, i) => i !== index));
+    setUploadProgress(prev => prev.filter((_, i) => i !== index));
   };
+
+  // Drag-and-drop handlers
+  const onDragEnd = (result) => {
+    if (!result.destination) return;
+    const reorder = (arr) => {
+      const items = Array.from(arr);
+      const [removed] = items.splice(result.source.index, 1);
+      items.splice(result.destination.index, 0, removed);
+      return items;
+    };
+    setImageFiles(reorder);
+    setImagePreviews(reorder);
+    setUploadedImageUrls(reorder);
+  };
+
+  const handleDropAreaClick = () => {
+    if (fileInputRef.current) fileInputRef.current.click();
+  };
+
+  const isUploading = uploadProgress.some(p => p < 100);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -77,7 +128,7 @@ const AddProduct = () => {
         tags: tagsArray,
         price: parseFloat(formData.price),
         originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
-        images: formData.images.length > 0 ? formData.images : ['placeholder-product.jpg']
+        images: uploadedImageUrls.length > 0 ? uploadedImageUrls : ['placeholder-product.jpg']
       };
 
       console.log('Product data to send:', productData);
@@ -296,33 +347,78 @@ const AddProduct = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Images</label>
-              <input
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
-              {formData.images.length > 0 && (
-                <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {formData.images.map((image, index) => (
-                    <div key={index} className="relative">
-                      <img
-                        src={image}
-                        alt={`Preview ${index + 1}`}
-                        className="w-full h-24 object-cover rounded"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeImage(index)}
-                        className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
-                      >
-                        ×
-                      </button>
+              {/* Drag-and-drop area */}
+              <div
+                onClick={handleDropAreaClick}
+                onDragOver={e => e.preventDefault()}
+                onDrop={async e => {
+                  e.preventDefault();
+                  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+                  if (files.length > 0) await handleImageUpload({ target: { files } });
+                }}
+                className="mt-1 mb-2 p-4 border-2 border-dashed border-gray-300 rounded-md text-center cursor-pointer hover:border-blue-400 relative"
+                style={{ position: 'relative' }}
+              >
+                Drag & drop images here, or click to select
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                  style={{ width: '100%', height: '100%' }}
+                  tabIndex={-1}
+                />
+              </div>
+              {/* Draggable image previews */}
+              <DragDropContext onDragEnd={onDragEnd}>
+                <Droppable droppableId="images" direction="horizontal">
+                  {(provided) => (
+                    <div
+                      className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2"
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                    >
+                      {imagePreviews.map((preview, index) => (
+                        <Draggable key={index} draggableId={`img-${index}`} index={index}>
+                          {(provided) => (
+                            <div
+                              className="relative"
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                            >
+                              <img
+                                src={uploadedImageUrls[index] || preview}
+                                alt={`Preview ${index + 1}`}
+                                className="w-full h-24 object-cover rounded"
+                              />
+                              {/* Progress bar */}
+                              {uploadProgress[index] !== undefined && uploadProgress[index] < 100 && (
+                                <div className="w-full h-2 bg-gray-200 rounded mt-1">
+                                  <div
+                                    className="h-2 bg-blue-500 rounded"
+                                    style={{ width: `${uploadProgress[index]}%` }}
+                                  />
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => removeImage(index)}
+                                className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
                     </div>
-                  ))}
-                </div>
-              )}
+                  )}
+                </Droppable>
+              </DragDropContext>
             </div>
 
             <div className="flex justify-end space-x-4">
@@ -335,10 +431,10 @@ const AddProduct = () => {
               </button>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || isUploading}
                 className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
               >
-                {loading ? 'Creating...' : 'Create Product'}
+                {loading ? 'Creating...' : isUploading ? 'Uploading Images...' : 'Create Product'}
               </button>
             </div>
           </form>
